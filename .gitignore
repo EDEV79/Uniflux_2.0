@@ -1,0 +1,26 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Composer
+/vendor/
+composer.phar
+
+# Node/build artifacts
+node_modules/
+
+# Logs and runtime
+*.log
+logs/
+storage/logs/
+tmp/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# PHP cache
+*.cache

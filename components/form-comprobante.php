@@ -12,7 +12,10 @@
 
     <?php
     $fechaInput = isset($formData['fecha']) ? trim((string) $formData['fecha']) : '';
-    $fechaDate = DateTime::createFromFormat('d/m/Y', $fechaInput);
+    $fechaDate = DateTime::createFromFormat('d-m-Y', $fechaInput);
+    if (!$fechaDate instanceof DateTime) {
+        $fechaDate = DateTime::createFromFormat('d/m/Y', $fechaInput);
+    }
     if ($fechaDate instanceof DateTime) {
         $fechaInput = $fechaDate->format('Y-m-d');
     }
@@ -67,7 +70,7 @@
             <label class="form-label">Fecha del evento</label>
             <div class="input-icon-wrap">
                 <i class="bi bi-calendar-event input-icon"></i>
-                <input type="text" name="fecha" data-datepicker class="form-control input-with-icon <?php echo isset($errors['fecha']) ? 'is-invalid' : ''; ?>" value="<?php echo e($fechaInput); ?>" placeholder="YYYY-MM-DD" autocomplete="off">
+                <input type="text" name="fecha" data-datepicker class="form-control input-with-icon <?php echo isset($errors['fecha']) ? 'is-invalid' : ''; ?>" value="<?php echo e($fechaInput); ?>" placeholder="DD-MM-YYYY" autocomplete="off">
             </div>
             <?php if (isset($errors['fecha'])) : ?><div class="invalid-feedback"><?php echo e($errors['fecha']); ?></div><?php endif; ?>
         </div>
@@ -105,7 +108,7 @@
                 <i class="fa-solid fa-floppy-disk me-2"></i><?php echo $formMode === 'edit' ? 'Guardar cambios' : 'Crear comprobante'; ?>
             </button>
             <?php if ($formMode === 'edit') : ?>
-                <a class="btn btn-outline-secondary" href="<?php echo e(app_url('comprobanteinvest.php')); ?>">Cancelar</a>
+                <a class="btn btn-outline-secondary" href="<?php echo e(app_url('comprobantes.php')); ?>">Cancelar</a>
             <?php endif; ?>
         </div>
     </form>

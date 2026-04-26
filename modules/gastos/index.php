@@ -3,9 +3,10 @@
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
 require_once __DIR__ . '/repository.php';
 
-require_login();
+require_capability('gastos.manage');
 
 $pdo = app_pdo();
+gastos_ensure_schema($pdo);
 
 if (!app_table_exists($pdo, 'gastos')) {
     http_response_code(500);

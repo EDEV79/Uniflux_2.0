@@ -3,9 +3,10 @@
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
 require_once __DIR__ . '/repository.php';
 
-require_login();
+require_capability('comprobantes.manage');
 
 $pdo = app_pdo();
+comprobantes_ensure_schema($pdo);
 $action = isset($_GET['action']) ? $_GET['action'] : 'index';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $perPageOptions = array(10, 25, 50, 100);
@@ -50,11 +51,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!verify_csrf_token(isset($_POST['_token']) ? $_POST['_token'] : '')) {
         $errors['general'] = 'La sesion expiro. Recarga la pagina e intenta nuevamente.';
+    } elseif ($postedAction === 'mark_completed') {
+        $recordId = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+        comprobantes_mark_completed($pdo, $recordId);
+        flash('success', 'Comprobante marcado como completado.');
+        header('Location: comprobantes.php');
+        exit;
+    } elseif ($postedAction === 'mark_pending') {
+        $recordId = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+        comprobantes_mark_pending($pdo, $recordId);
+        flash('success', 'Comprobante regresado a pendiente.');
+        header('Location: comprobantes.php');
+        exit;
     } elseif ($postedAction === 'delete') {
         $deleteId = isset($_POST['id']) ? (int) $_POST['id'] : 0;
         comprobantes_delete($pdo, $deleteId);
         flash('success', 'Comprobante eliminado correctamente.');
-        header('Location: comprobanteinvest.php');
+        header('Location: comprobantes.php');
         exit;
     } else {
         $errors = comprobantes_validate($formData);
@@ -64,13 +77,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updateId = isset($_POST['id']) ? (int) $_POST['id'] : 0;
                 comprobantes_update($pdo, $updateId, $formData);
                 flash('success', 'Comprobante actualizado correctamente.');
-                header('Location: comprobanteinvest.php?action=edit&id=' . $updateId);
+                header('Location: comprobantes.php');
                 exit;
             }
 
             comprobantes_create($pdo, $formData, current_user_name());
             flash('success', 'Comprobante creado correctamente.');
-            header('Location: comprobanteinvest.php');
+            header('Location: comprobantes.php');
             exit;
         }
     }
@@ -98,13 +111,13 @@ $currentModule = 'comprobantes';
 $pageActions = array(
     array(
         'label' => 'Nuevo comprobante',
-        'href' => 'comprobanteinvest.php?action=create',
+        'href' => 'comprobantes.php?action=create',
         'icon' => 'fa-solid fa-plus',
         'class' => 'btn-primary',
     ),
     array(
         'label' => 'Limpiar filtros',
-        'href' => 'comprobanteinvest.php',
+        'href' => 'comprobantes.php',
         'icon' => 'fa-solid fa-rotate-left',
         'class' => 'btn-outline-secondary',
     ),

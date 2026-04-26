@@ -2,6 +2,41 @@
 
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
 
+if (!function_exists('comprobantes_ensure_schema')) {
+    function comprobantes_ensure_schema(PDO $pdo)
+    {
+        if (!app_table_exists($pdo, 'eventos')) {
+            return;
+        }
+
+        if (!app_column_exists($pdo, 'eventos', 'user_id')) {
+            $pdo->exec("ALTER TABLE eventos ADD COLUMN user_id INT NULL AFTER creador");
+        }
+
+        if (!app_column_exists($pdo, 'eventos', 'tenant_id')) {
+            $pdo->exec("ALTER TABLE eventos ADD COLUMN tenant_id INT NULL AFTER user_id");
+        }
+
+        if (!app_column_exists($pdo, 'eventos', 'estado')) {
+            $pdo->exec("ALTER TABLE eventos ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'Pendiente' AFTER comentarios");
+            $pdo->exec("UPDATE eventos SET estado = 'Pendiente' WHERE estado IS NULL OR estado = ''");
+        }
+    }
+}
+
+if (!function_exists('comprobantes_user_scope')) {
+    function comprobantes_user_scope()
+    {
+        $isPrivileged = current_user_can('solicitudes.manage') || current_user_can('clientes.manage');
+
+        return array(
+            'restricted' => !$isPrivileged,
+            'user_id' => current_user_id(),
+            'tenant_id' => isset($_SESSION['tenant_id']) ? (int) $_SESSION['tenant_id'] : 0,
+        );
+    }
+}
+
 if (!function_exists('comprobantes_default_form_data')) {
     function comprobantes_default_form_data()
     {
@@ -15,6 +50,7 @@ if (!function_exists('comprobantes_default_form_data')) {
             'lugar' => '',
             'precio_show' => '',
             'comentarios' => '',
+            'estado' => 'Pendiente',
         );
     }
 }
@@ -32,6 +68,7 @@ if (!function_exists('comprobantes_request_data')) {
             'lugar' => isset($source['lugar']) ? trim($source['lugar']) : '',
             'precio_show' => isset($source['precio_show']) ? trim($source['precio_show']) : '',
             'comentarios' => isset($source['comentarios']) ? trim($source['comentarios']) : '',
+            'estado' => isset($source['estado']) ? trim($source['estado']) : 'Pendiente',
         );
     }
 }
@@ -138,8 +175,19 @@ if (!function_exists('comprobantes_validate')) {
 if (!function_exists('comprobantes_find')) {
     function comprobantes_find(PDO $pdo, $id)
     {
-        $statement = $pdo->prepare('SELECT id, nombre, cedula, celular, email, lugar, fecha, hora, comentarios, precio_show, creador FROM eventos WHERE id = :id LIMIT 1');
-        $statement->execute(array('id' => (int) $id));
+        $scope = comprobantes_user_scope();
+        $sql = 'SELECT id, nombre, cedula, celular, email, lugar, fecha, hora, comentarios, estado, precio_show, creador FROM eventos WHERE id = :id';
+        $parameters = array('id' => (int) $id);
+
+        if ($scope['restricted']) {
+            $sql .= ' AND user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $sql .= ' LIMIT 1';
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($parameters);
         $record = $statement->fetch();
 
         if (!$record) {
@@ -156,12 +204,23 @@ if (!function_exists('comprobantes_find')) {
 if (!function_exists('comprobantes_count')) {
     function comprobantes_count(PDO $pdo, $searchTerm)
     {
+        $scope = comprobantes_user_scope();
         $sql = 'SELECT COUNT(*) FROM eventos';
         $parameters = array();
+        $conditions = array();
+
+        if ($scope['restricted']) {
+            $conditions[] = 'user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
 
         if ($searchTerm !== '') {
-            $sql .= ' WHERE nombre LIKE :search OR cedula LIKE :search OR email LIKE :search';
+            $conditions[] = '(nombre LIKE :search OR cedula LIKE :search OR email LIKE :search)';
             $parameters['search'] = '%' . $searchTerm . '%';
+        }
+
+        if (!empty($conditions)) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
         }
 
         $statement = $pdo->prepare($sql);
@@ -174,6 +233,7 @@ if (!function_exists('comprobantes_count')) {
 if (!function_exists('comprobantes_paginated')) {
     function comprobantes_paginated(PDO $pdo, $searchTerm, $limit, $offset, $sortColumn = 'id', $sortDirection = 'desc')
     {
+        $scope = comprobantes_user_scope();
         $allowedSortColumns = array('id', 'nombre', 'email', 'fecha', 'precio_show');
         if (!in_array($sortColumn, $allowedSortColumns, true)) {
             $sortColumn = 'id';
@@ -181,17 +241,30 @@ if (!function_exists('comprobantes_paginated')) {
 
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'ASC' : 'DESC';
 
-        $sql = 'SELECT id, nombre, cedula, celular, email, lugar, fecha, hora, comentarios, precio_show, creador FROM eventos';
+        $sql = 'SELECT id, nombre, cedula, celular, email, lugar, fecha, hora, comentarios, estado, precio_show, creador FROM eventos';
         $parameters = array();
+        $conditions = array();
+
+        if ($scope['restricted']) {
+            $conditions[] = 'user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
 
         if ($searchTerm !== '') {
-            $sql .= ' WHERE nombre LIKE :search OR cedula LIKE :search OR email LIKE :search';
+            $conditions[] = '(nombre LIKE :search OR cedula LIKE :search OR email LIKE :search)';
             $parameters['search'] = '%' . $searchTerm . '%';
+        }
+
+        if (!empty($conditions)) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
         }
 
         $sql .= sprintf(' ORDER BY %s %s LIMIT :limit OFFSET :offset', $sortColumn, $sortDirection);
 
         $statement = $pdo->prepare($sql);
+        if (isset($parameters['user_id'])) {
+            $statement->bindValue(':user_id', (int) $parameters['user_id'], PDO::PARAM_INT);
+        }
         if (isset($parameters['search'])) {
             $statement->bindValue(':search', $parameters['search'], PDO::PARAM_STR);
         }
@@ -206,9 +279,10 @@ if (!function_exists('comprobantes_paginated')) {
 if (!function_exists('comprobantes_create')) {
     function comprobantes_create(PDO $pdo, array $data, $creator)
     {
+        $scope = comprobantes_user_scope();
         $statement = $pdo->prepare(
-            'INSERT INTO eventos (nombre, cedula, celular, lugar, fecha, hora, email, precio_show, comentarios, creador)
-             VALUES (:nombre, :cedula, :celular, :lugar, :fecha, :hora, :email, :precio_show, :comentarios, :creador)'
+            'INSERT INTO eventos (nombre, cedula, celular, lugar, fecha, hora, email, precio_show, comentarios, estado, creador, user_id, tenant_id)
+             VALUES (:nombre, :cedula, :celular, :lugar, :fecha, :hora, :email, :precio_show, :comentarios, :estado, :creador, :user_id, :tenant_id)'
         );
 
         $statement->execute(array(
@@ -221,7 +295,10 @@ if (!function_exists('comprobantes_create')) {
             'email' => $data['email'],
             'precio_show' => $data['precio_show'],
             'comentarios' => $data['comentarios'],
+            'estado' => $data['estado'] !== '' ? $data['estado'] : 'Pendiente',
             'creador' => $creator,
+            'user_id' => current_user_id(),
+            'tenant_id' => $scope['tenant_id'] > 0 ? $scope['tenant_id'] : null,
         ));
     }
 }
@@ -229,14 +306,15 @@ if (!function_exists('comprobantes_create')) {
 if (!function_exists('comprobantes_update')) {
     function comprobantes_update(PDO $pdo, $id, array $data)
     {
+        $scope = comprobantes_user_scope();
         $statement = $pdo->prepare(
             'UPDATE eventos
              SET nombre = :nombre, cedula = :cedula, celular = :celular, lugar = :lugar, fecha = :fecha, hora = :hora,
                  email = :email, precio_show = :precio_show, comentarios = :comentarios
-             WHERE id = :id'
+             WHERE id = :id' . ($scope['restricted'] ? ' AND user_id = :user_id' : '')
         );
 
-        $statement->execute(array(
+        $parameters = array(
             'id' => (int) $id,
             'nombre' => $data['nombre'],
             'cedula' => $data['cedula'],
@@ -247,30 +325,77 @@ if (!function_exists('comprobantes_update')) {
             'email' => $data['email'],
             'precio_show' => $data['precio_show'],
             'comentarios' => $data['comentarios'],
-        ));
+        );
+
+        if ($scope['restricted']) {
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement->execute($parameters);
     }
 }
 
 if (!function_exists('comprobantes_delete')) {
     function comprobantes_delete(PDO $pdo, $id)
     {
-        $statement = $pdo->prepare('DELETE FROM eventos WHERE id = :id');
-        $statement->execute(array('id' => (int) $id));
+        $scope = comprobantes_user_scope();
+        $sql = 'DELETE FROM eventos WHERE id = :id';
+        $parameters = array('id' => (int) $id);
+
+        if ($scope['restricted']) {
+            $sql .= ' AND user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($parameters);
+    }
+}
+
+if (!function_exists('comprobantes_mark_completed')) {
+    function comprobantes_mark_completed(PDO $pdo, $id)
+    {
+        $scope = comprobantes_user_scope();
+        $sql = "UPDATE eventos SET estado = 'Completado' WHERE id = :id";
+        $parameters = array('id' => (int) $id);
+
+        if ($scope['restricted']) {
+            $sql .= ' AND user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($parameters);
+    }
+}
+
+if (!function_exists('comprobantes_mark_pending')) {
+    function comprobantes_mark_pending(PDO $pdo, $id)
+    {
+        $scope = comprobantes_user_scope();
+        $sql = "UPDATE eventos SET estado = 'Pendiente' WHERE id = :id";
+        $parameters = array('id' => (int) $id);
+
+        if ($scope['restricted']) {
+            $sql .= ' AND user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($parameters);
     }
 }
 
 if (!function_exists('comprobantes_status')) {
     function comprobantes_status(array $item)
     {
-        $comments = isset($item['comentarios']) ? strtolower($item['comentarios']) : '';
-        if (strpos($comments, 'pagado') !== false || strpos($comments, 'pago completado') !== false) {
-            return array('label' => 'Pagado', 'class' => 'badge-soft-success');
+        $estado = isset($item['estado']) ? strtolower(trim((string) $item['estado'])) : 'pendiente';
+
+        if ($estado === 'pagado' || $estado === 'completado') {
+            return array('label' => 'Completado', 'class' => 'badge-soft-success');
         }
 
-        $eventDate = !empty($item['fecha']) ? DateTime::createFromFormat('Y-m-d', $item['fecha']) : null;
-        $today = new DateTime('today');
-
-        if ($eventDate instanceof DateTime && $eventDate < $today) {
+        if ($estado === 'atrasado') {
             return array('label' => 'Atrasado', 'class' => 'badge-soft-danger');
         }
 

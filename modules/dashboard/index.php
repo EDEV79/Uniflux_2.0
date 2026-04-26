@@ -1,12 +1,14 @@
 <?php
 
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
-require_login();
+require_capability('dashboard.view');
 
 $pdo = app_pdo();
+$dashboardRestricted = !current_user_can('solicitudes.manage') && !current_user_can('clientes.manage');
+$dashboardUserId = current_user_id();
 
 if (!function_exists('dashboard_sum_first_existing')) {
-    function dashboard_sum_first_existing(PDO $pdo, $tableName, array $candidateColumns)
+    function dashboard_sum_first_existing(PDO $pdo, $tableName, array $candidateColumns, $restricted = false, $userId = 0)
     {
         if (!app_table_exists($pdo, $tableName)) {
             return 0;
@@ -17,7 +19,15 @@ if (!function_exists('dashboard_sum_first_existing')) {
                 continue;
             }
 
-            $statement = $pdo->query('SELECT COALESCE(SUM(' . $columnName . '), 0) AS total_amount FROM ' . $tableName);
+            $sql = 'SELECT COALESCE(SUM(' . $columnName . '), 0) AS total_amount FROM ' . $tableName;
+            if ($restricted && app_column_exists($pdo, $tableName, 'user_id')) {
+                $sql .= ' WHERE user_id = :user_id';
+                $statement = $pdo->prepare($sql);
+                $statement->execute(array('user_id' => $userId));
+                return (float) $statement->fetchColumn();
+            }
+
+            $statement = $pdo->query($sql);
             return (float) $statement->fetchColumn();
         }
 
@@ -26,26 +36,42 @@ if (!function_exists('dashboard_sum_first_existing')) {
 }
 
 if (!function_exists('dashboard_count_records')) {
-    function dashboard_count_records(PDO $pdo, $tableName)
+    function dashboard_count_records(PDO $pdo, $tableName, $restricted = false, $userId = 0)
     {
         if (!app_table_exists($pdo, $tableName)) {
             return 0;
         }
 
-        $statement = $pdo->query('SELECT COUNT(*) FROM ' . $tableName);
+        $sql = 'SELECT COUNT(*) FROM ' . $tableName;
+        if ($restricted && app_column_exists($pdo, $tableName, 'user_id')) {
+            $sql .= ' WHERE user_id = :user_id';
+            $statement = $pdo->prepare($sql);
+            $statement->execute(array('user_id' => $userId));
+            return (int) $statement->fetchColumn();
+        }
+
+        $statement = $pdo->query($sql);
         return (int) $statement->fetchColumn();
     }
 }
 
-$totalIngresos = dashboard_sum_first_existing($pdo, 'eventos', array('precio_show'));
-$totalGastos = dashboard_sum_first_existing($pdo, 'gastos', array('total', 'monto', 'importe'));
+$totalIngresos = dashboard_sum_first_existing($pdo, 'eventos', array('precio_show'), $dashboardRestricted, $dashboardUserId);
+$totalGastos = dashboard_sum_first_existing($pdo, 'gastos', array('total', 'monto', 'importe'), $dashboardRestricted, $dashboardUserId);
 $balance = $totalIngresos - $totalGastos;
-$totalComprobantes = dashboard_count_records($pdo, 'eventos');
+$totalComprobantes = dashboard_count_records($pdo, 'eventos', $dashboardRestricted, $dashboardUserId);
 $totalSolicitudes = dashboard_count_records($pdo, 'solicitudes');
 
 $recentComprobantes = array();
 if (app_table_exists($pdo, 'eventos')) {
-    $recentStatement = $pdo->query('SELECT id, nombre, fecha, lugar, precio_show FROM eventos ORDER BY id DESC LIMIT 5');
+    $recentSql = 'SELECT id, nombre, fecha, lugar, precio_show FROM eventos';
+    if ($dashboardRestricted && app_column_exists($pdo, 'eventos', 'user_id')) {
+        $recentSql .= ' WHERE user_id = :user_id ORDER BY id DESC LIMIT 5';
+        $recentStatement = $pdo->prepare($recentSql);
+        $recentStatement->execute(array('user_id' => $dashboardUserId));
+    } else {
+        $recentSql .= ' ORDER BY id DESC LIMIT 5';
+        $recentStatement = $pdo->query($recentSql);
+    }
     $recentComprobantes = $recentStatement->fetchAll();
 }
 
@@ -70,16 +96,25 @@ for ($i = 0; $i < 12; $i++) {
 }
 
 if (app_table_exists($pdo, 'eventos')) {
-    $barStmt = $pdo->query(
-        "SELECT DATE_FORMAT(fecha, '%Y-%m') AS mes,
+    $barSql = "SELECT DATE_FORMAT(fecha, '%Y-%m') AS mes,
                 COUNT(*) AS eventos,
                 COALESCE(SUM(precio_show), 0) AS total
          FROM eventos
-                 WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-           AND fecha IS NOT NULL
+         WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+           AND fecha IS NOT NULL";
+    if ($dashboardRestricted && app_column_exists($pdo, 'eventos', 'user_id')) {
+        $barSql .= " AND user_id = :user_id";
+    }
+    $barSql .= "
          GROUP BY mes
-         ORDER BY mes ASC"
-    );
+         ORDER BY mes ASC";
+
+    if ($dashboardRestricted && app_column_exists($pdo, 'eventos', 'user_id')) {
+        $barStmt = $pdo->prepare($barSql);
+        $barStmt->execute(array('user_id' => $dashboardUserId));
+    } else {
+        $barStmt = $pdo->query($barSql);
+    }
 
     foreach ($barStmt->fetchAll() as $row) {
         $monthKey = $row['mes'];
@@ -100,15 +135,24 @@ if (app_table_exists($pdo, 'gastos') && app_column_exists($pdo, 'gastos', 'fecha
     }
 
     if ($expenseColumn !== null) {
-        $expenseStmt = $pdo->query(
-            "SELECT DATE_FORMAT(fecha, '%Y-%m') AS mes,
+        $expenseSql = "SELECT DATE_FORMAT(fecha, '%Y-%m') AS mes,
                     COALESCE(SUM(" . $expenseColumn . "), 0) AS total_gastos
              FROM gastos
              WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-               AND fecha IS NOT NULL
+               AND fecha IS NOT NULL";
+        if ($dashboardRestricted && app_column_exists($pdo, 'gastos', 'user_id')) {
+            $expenseSql .= " AND user_id = :user_id";
+        }
+        $expenseSql .= "
              GROUP BY mes
-             ORDER BY mes ASC"
-        );
+             ORDER BY mes ASC";
+
+        if ($dashboardRestricted && app_column_exists($pdo, 'gastos', 'user_id')) {
+            $expenseStmt = $pdo->prepare($expenseSql);
+            $expenseStmt->execute(array('user_id' => $dashboardUserId));
+        } else {
+            $expenseStmt = $pdo->query($expenseSql);
+        }
 
         foreach ($expenseStmt->fetchAll() as $row) {
             $monthKey = $row['mes'];
@@ -144,20 +188,25 @@ $pageTitle = 'Dashboard | ' . app_name();
 $pageHeading = 'Dashboard';
 $pageDescription = '';
 $currentModule = 'dashboard';
-$pageActions = array(
-    array(
+$pageActions = array();
+
+if (current_user_can('comprobantes.manage')) {
+    $pageActions[] = array(
         'label' => 'Nuevo comprobante',
-        'href' => 'comprobanteinvest.php?action=create',
+        'href' => 'comprobantes.php?action=create',
         'icon' => 'fa-solid fa-plus',
         'class' => 'btn-primary',
-    ),
-    array(
+    );
+}
+
+if (current_user_can('solicitudes.manage')) {
+    $pageActions[] = array(
         'label' => 'Ver solicitudes',
         'href' => 'solicitudes.php',
         'icon' => 'fa-solid fa-list-check',
         'class' => 'btn-outline-secondary',
-    ),
-);
+    );
+}
 
 include APP_ROOT . '/includes/header.php';
 ?>
@@ -228,7 +277,7 @@ include APP_ROOT . '/includes/header.php';
                     <h2 class="surface-card__title">Actividad reciente</h2>
                     <p class="surface-card__subtitle">Ultimos comprobantes creados.</p>
                 </div>
-                <a class="btn btn-sm btn-outline-primary" href="<?php echo e(app_url('comprobanteinvest.php')); ?>">
+                <a class="btn btn-sm btn-outline-primary" href="<?php echo e(app_url('comprobantes.php')); ?>">
                     <i class="fa-solid fa-list me-1"></i>Ver todos
                 </a>
             </div>

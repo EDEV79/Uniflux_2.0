@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function () {
     window.flatpickr('[data-datepicker]', {
       dateFormat: 'Y-m-d',
       altInput: true,
-      altFormat: 'Y-m-d',
+      altFormat: 'd-m-Y',
       allowInput: true,
       disableMobile: true,
       animate: true,
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
   } else if (window.jQuery) {
     var $ = window.jQuery;
     $('[data-datepicker]').datepicker({
-      dateFormat: 'dd/mm/yy',
+      dateFormat: 'dd-mm-yy',
     });
 
     $('[data-timepicker]').timepicker({

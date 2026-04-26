@@ -13,23 +13,40 @@ if (!function_exists('app_pdo')) {
 
         $host = env('DB_HOST', 'localhost');
         $port = env('DB_PORT', '3306');
-        $database = env('DB_NAME', 'adminhinvest');
+        $database = env('DB_NAME', 'uniflux_db');
         $username = env('DB_USER', 'root');
         $password = env('DB_PASSWORD', '');
         $charset = env('DB_CHARSET', 'utf8mb4');
 
-        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
+        /* --------datos de la conexion a la base de datos cpanel ----------- */
+        //"host:localhost", 
+        //"username:cpanel_db_user",    
+        //"password:change_me_securely", 
+        //"database:uniflux_db");
 
-        $pdo = new PDO(
-            $dsn,
-            $username,
-            $password,
-            array(
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            )
-        );
+        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
+        $debugMode = strtolower((string) env('APP_ENV', 'local')) !== 'production'
+            || strtolower((string) env('APP_DEBUG', 'false')) === 'true';
+
+        try {
+            $pdo = new PDO(
+                $dsn,
+                $username,
+                $password,
+                array(
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES => false,
+                )
+            );
+        } catch (PDOException $exception) {
+            $message = 'No se pudo conectar a la base de datos.';
+            if ($debugMode) {
+                $message .= ' ' . $exception->getMessage();
+            }
+
+            throw new RuntimeException($message, 0, $exception);
+        }
 
         return $pdo;
     }
@@ -76,3 +93,4 @@ if (!function_exists('app_column_exists')) {
         return $cache[$cacheKey];
     }
 }
+

@@ -10,6 +10,17 @@
         <div class="alert alert-danger"><?php echo e($errors['general']); ?></div>
     <?php endif; ?>
 
+    <?php
+    $fechaInput = isset($formData['fecha']) ? trim((string) $formData['fecha']) : '';
+    $fechaDate = DateTime::createFromFormat('d-m-Y', $fechaInput);
+    if (!$fechaDate instanceof DateTime) {
+        $fechaDate = DateTime::createFromFormat('d/m/Y', $fechaInput);
+    }
+    if ($fechaDate instanceof DateTime) {
+        $fechaInput = $fechaDate->format('Y-m-d');
+    }
+    ?>
+
     <form method="post" class="row g-3 admin-form comprobante-form-grid" data-loading-form>
         <input type="hidden" name="_token" value="<?php echo e(csrf_token()); ?>">
         <input type="hidden" name="form_action" value="<?php echo $formMode === 'edit' ? 'update' : 'create'; ?>">
@@ -39,7 +50,7 @@
             <label class="form-label">Fecha</label>
             <div class="input-icon-wrap">
                 <i class="bi bi-calendar-event input-icon"></i>
-                <input type="text" name="fecha" data-datepicker class="form-control input-with-icon <?php echo isset($errors['fecha']) ? 'is-invalid' : ''; ?>" value="<?php echo e($formData['fecha']); ?>" placeholder="YYYY-MM-DD" autocomplete="off">
+                <input type="text" name="fecha" data-datepicker class="form-control input-with-icon <?php echo isset($errors['fecha']) ? 'is-invalid' : ''; ?>" value="<?php echo e($fechaInput); ?>" placeholder="DD-MM-YYYY" autocomplete="off">
             </div>
             <?php if (isset($errors['fecha'])) : ?><div class="invalid-feedback"><?php echo e($errors['fecha']); ?></div><?php endif; ?>
         </div>

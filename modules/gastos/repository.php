@@ -2,6 +2,36 @@
 
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
 
+if (!function_exists('gastos_ensure_schema')) {
+    function gastos_ensure_schema(PDO $pdo)
+    {
+        if (!app_table_exists($pdo, 'gastos')) {
+            return;
+        }
+
+        if (!app_column_exists($pdo, 'gastos', 'user_id')) {
+            $pdo->exec("ALTER TABLE gastos ADD COLUMN user_id INT NULL AFTER printdate");
+        }
+
+        if (!app_column_exists($pdo, 'gastos', 'tenant_id')) {
+            $pdo->exec("ALTER TABLE gastos ADD COLUMN tenant_id INT NULL AFTER user_id");
+        }
+    }
+}
+
+if (!function_exists('gastos_user_scope')) {
+    function gastos_user_scope()
+    {
+        $isPrivileged = current_user_can('solicitudes.manage') || current_user_can('clientes.manage');
+
+        return array(
+            'restricted' => !$isPrivileged,
+            'user_id' => current_user_id(),
+            'tenant_id' => isset($_SESSION['tenant_id']) ? (int) $_SESSION['tenant_id'] : 0,
+        );
+    }
+}
+
 if (!function_exists('gastos_default_form_data')) {
     function gastos_default_form_data()
     {
@@ -104,13 +134,18 @@ if (!function_exists('gastos_validate')) {
 if (!function_exists('gastos_find')) {
     function gastos_find(PDO $pdo, $id)
     {
+        $scope = gastos_user_scope();
         $statement = $pdo->prepare(
             'SELECT idgastos, proveedor, nfactura, fecha, subtotal, itbms, total, documento, vendedor, printdate
              FROM gastos
-             WHERE idgastos = :id
+             WHERE idgastos = :id' . ($scope['restricted'] ? ' AND user_id = :user_id' : '') . '
              LIMIT 1'
         );
-        $statement->execute(array('id' => (int) $id));
+        $parameters = array('id' => (int) $id);
+        if ($scope['restricted']) {
+            $parameters['user_id'] = $scope['user_id'];
+        }
+        $statement->execute($parameters);
 
         $record = $statement->fetch();
         return $record ? $record : null;
@@ -120,12 +155,23 @@ if (!function_exists('gastos_find')) {
 if (!function_exists('gastos_count')) {
     function gastos_count(PDO $pdo, $searchTerm)
     {
+        $scope = gastos_user_scope();
         $sql = 'SELECT COUNT(*) FROM gastos';
         $parameters = array();
+        $conditions = array();
+
+        if ($scope['restricted']) {
+            $conditions[] = 'user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
 
         if ($searchTerm !== '') {
-            $sql .= ' WHERE proveedor LIKE :search OR nfactura LIKE :search OR documento LIKE :search OR vendedor LIKE :search';
+            $conditions[] = '(proveedor LIKE :search OR nfactura LIKE :search OR documento LIKE :search OR vendedor LIKE :search)';
             $parameters['search'] = '%' . $searchTerm . '%';
+        }
+
+        if (!empty($conditions)) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
         }
 
         $statement = $pdo->prepare($sql);
@@ -138,6 +184,7 @@ if (!function_exists('gastos_count')) {
 if (!function_exists('gastos_paginated')) {
     function gastos_paginated(PDO $pdo, $searchTerm, $limit, $offset, $sortColumn = 'idgastos', $sortDirection = 'desc')
     {
+        $scope = gastos_user_scope();
         $allowedSortColumns = array('idgastos', 'proveedor', 'nfactura', 'fecha', 'total');
         if (!in_array($sortColumn, $allowedSortColumns, true)) {
             $sortColumn = 'idgastos';
@@ -147,15 +194,28 @@ if (!function_exists('gastos_paginated')) {
 
         $sql = 'SELECT idgastos, proveedor, nfactura, fecha, subtotal, itbms, total, documento, vendedor, printdate FROM gastos';
         $parameters = array();
+        $conditions = array();
+
+        if ($scope['restricted']) {
+            $conditions[] = 'user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
 
         if ($searchTerm !== '') {
-            $sql .= ' WHERE proveedor LIKE :search OR nfactura LIKE :search OR documento LIKE :search OR vendedor LIKE :search';
+            $conditions[] = '(proveedor LIKE :search OR nfactura LIKE :search OR documento LIKE :search OR vendedor LIKE :search)';
             $parameters['search'] = '%' . $searchTerm . '%';
+        }
+
+        if (!empty($conditions)) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
         }
 
         $sql .= sprintf(' ORDER BY %s %s LIMIT :limit OFFSET :offset', $sortColumn, $sortDirection);
 
         $statement = $pdo->prepare($sql);
+        if (isset($parameters['user_id'])) {
+            $statement->bindValue(':user_id', (int) $parameters['user_id'], PDO::PARAM_INT);
+        }
         if (isset($parameters['search'])) {
             $statement->bindValue(':search', $parameters['search'], PDO::PARAM_STR);
         }
@@ -170,9 +230,10 @@ if (!function_exists('gastos_paginated')) {
 if (!function_exists('gastos_create')) {
     function gastos_create(PDO $pdo, array $data)
     {
+        $scope = gastos_user_scope();
         $statement = $pdo->prepare(
-            'INSERT INTO gastos (proveedor, nfactura, fecha, subtotal, itbms, total, documento, vendedor, printdate)
-             VALUES (:proveedor, :nfactura, :fecha, :subtotal, :itbms, :total, :documento, :vendedor, :printdate)'
+            'INSERT INTO gastos (proveedor, nfactura, fecha, subtotal, itbms, total, documento, vendedor, printdate, user_id, tenant_id)
+             VALUES (:proveedor, :nfactura, :fecha, :subtotal, :itbms, :total, :documento, :vendedor, :printdate, :user_id, :tenant_id)'
         );
 
         $statement->execute(array(
@@ -185,6 +246,8 @@ if (!function_exists('gastos_create')) {
             'documento' => $data['documento'],
             'vendedor' => $data['vendedor'],
             'printdate' => $data['printdate'] !== '' ? $data['printdate'] : date('Y-m-d H:i:s'),
+            'user_id' => current_user_id(),
+            'tenant_id' => $scope['tenant_id'] > 0 ? $scope['tenant_id'] : null,
         ));
     }
 }
@@ -192,6 +255,7 @@ if (!function_exists('gastos_create')) {
 if (!function_exists('gastos_update')) {
     function gastos_update(PDO $pdo, $id, array $data)
     {
+        $scope = gastos_user_scope();
         $statement = $pdo->prepare(
             'UPDATE gastos
              SET proveedor = :proveedor,
@@ -203,10 +267,10 @@ if (!function_exists('gastos_update')) {
                  documento = :documento,
                  vendedor = :vendedor,
                  printdate = :printdate
-             WHERE idgastos = :id'
+             WHERE idgastos = :id' . ($scope['restricted'] ? ' AND user_id = :user_id' : '')
         );
 
-        $statement->execute(array(
+        $parameters = array(
             'id' => (int) $id,
             'proveedor' => $data['proveedor'],
             'nfactura' => $data['nfactura'],
@@ -217,14 +281,29 @@ if (!function_exists('gastos_update')) {
             'documento' => $data['documento'],
             'vendedor' => $data['vendedor'],
             'printdate' => $data['printdate'] !== '' ? $data['printdate'] : date('Y-m-d H:i:s'),
-        ));
+        );
+
+        if ($scope['restricted']) {
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement->execute($parameters);
     }
 }
 
 if (!function_exists('gastos_delete')) {
     function gastos_delete(PDO $pdo, $id)
     {
-        $statement = $pdo->prepare('DELETE FROM gastos WHERE idgastos = :id');
-        $statement->execute(array('id' => (int) $id));
+        $scope = gastos_user_scope();
+        $sql = 'DELETE FROM gastos WHERE idgastos = :id';
+        $parameters = array('id' => (int) $id);
+
+        if ($scope['restricted']) {
+            $sql .= ' AND user_id = :user_id';
+            $parameters['user_id'] = $scope['user_id'];
+        }
+
+        $statement = $pdo->prepare($sql);
+        $statement->execute($parameters);
     }
 }

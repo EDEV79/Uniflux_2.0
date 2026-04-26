@@ -5,6 +5,8 @@ $pageDescription = isset($pageDescription) ? $pageDescription : 'Vista general d
 $pageActions = isset($pageActions) ? $pageActions : array();
 $currentModule = isset($currentModule) ? $currentModule : 'dashboard';
 $flashMessages = consume_flashes();
+$saasAdminCssPath = APP_ROOT . '/css/saas-admin.css';
+$saasAdminCssVersion = file_exists($saasAdminCssPath) ? (string) filemtime($saasAdminCssPath) : '1';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -23,7 +25,7 @@ $flashMessages = consume_flashes();
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" onerror="this.onerror=null;this.href='https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css';">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.3/themes/base/jquery-ui.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.min.css">
-    <link rel="stylesheet" href="<?php echo e(asset_url('css/saas-admin.css')); ?>">
+    <link rel="stylesheet" href="<?php echo e(asset_url('css/saas-admin.css')); ?>?v=<?php echo e($saasAdminCssVersion); ?>">
 </head>
 
 <body class="admin-body" data-module="<?php echo e($currentModule); ?>">

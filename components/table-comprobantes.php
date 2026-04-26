@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $sortableColumns = array(
     'id' => 'No.',
     'nombre' => 'Cliente',
@@ -30,20 +30,23 @@ $sortableColumns = array(
                         }
                         ?>
                         <th>
-                            <a class="table-sort <?php echo $isActive ? 'is-active' : ''; ?>" href="<?php echo e(app_url('comprobanteinvest.php')); ?>?<?php echo e(query_string_with(array('sort' => $columnKey, 'dir' => $nextDirection, 'page' => 1))); ?>">
+                            <a class="table-sort <?php echo $isActive ? 'is-active' : ''; ?>" href="<?php echo e(app_url('comprobantes.php')); ?>?<?php echo e(query_string_with(array('sort' => $columnKey, 'dir' => $nextDirection, 'page' => 1))); ?>">
                                 <span><?php echo e($columnLabel); ?></span>
                                 <i class="fa-solid <?php echo e($sortIcon); ?>"></i>
                             </a>
                         </th>
                     <?php endforeach; ?>
                     <th>Estado</th>
-                    <th class="text-end">Acciones</th>
+                    <th class="text-center">Completado</th>
+                    <th class="text-center">Editar</th>
+                    <th class="text-center">PDF</th>
+                    <th class="text-center">Eliminar</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($records)) : ?>
                     <tr>
-                        <td colspan="7">
+                        <td colspan="10">
                             <div class="empty-state py-4">
                                 <i class="fa-regular fa-folder-open"></i>
                                 <p>No se encontraron comprobantes con los filtros actuales.</p>
@@ -52,7 +55,15 @@ $sortableColumns = array(
                     </tr>
                 <?php else : ?>
                     <?php foreach ($records as $record) : ?>
-                        <?php $status = comprobantes_status($record); ?>
+                        <?php
+                        $status = comprobantes_status($record);
+                        $isCompleted = strtolower((string) ($record['estado'] ?? 'pendiente')) === 'completado';
+                        $toggleAction = $isCompleted ? 'mark_pending' : 'mark_completed';
+                        $toggleTitle = $isCompleted ? 'Regresar a pendiente' : 'Marcar como completado';
+                        $toggleConfirm = $isCompleted ? 'Regresar este comprobante a pendiente?' : 'Marcar este comprobante como completado?';
+                        $toggleAria = $isCompleted ? 'Regresar comprobante ' . $record['id'] . ' a pendiente' : 'Marcar comprobante ' . $record['id'] . ' como completado';
+                        $toggleIcon = $isCompleted ? 'fa-rotate-left' : 'fa-rotate-right';
+                        ?>
                         <tr data-filter-row>
                             <td data-label="No."><strong>#<?php echo e($record['id']); ?></strong></td>
                             <td data-label="Cliente">
@@ -66,23 +77,35 @@ $sortableColumns = array(
                             </td>
                             <td data-label="Monto"><strong><?php echo e(format_currency($record['precio_show'])); ?></strong></td>
                             <td data-label="Estado"><span class="badge rounded-pill <?php echo e($status['class']); ?>"><?php echo e($status['label']); ?></span></td>
-                            <td data-label="Acciones">
-                                <div class="d-flex justify-content-end gap-1 table-actions">
-                                    <a class="tbl-action tbl-action--edit" href="<?php echo e(app_url('comprobanteinvest.php')); ?>?action=edit&id=<?php echo e($record['id']); ?>" title="Editar" aria-label="Editar comprobante <?php echo e($record['id']); ?>">
-                                        <i class="fa-solid fa-pen"></i>
-                                    </a>
-                                    <a class="tbl-action tbl-action--pdf" href="<?php echo e(app_url('comprobanteinvestpdf.php')); ?>?id=<?php echo e($record['id']); ?>&cedula=<?php echo e($record['cedula']); ?>" target="_blank" rel="noopener noreferrer" title="Ver PDF" aria-label="Ver PDF <?php echo e($record['id']); ?>">
-                                        <i class="fa-regular fa-file-pdf"></i>
-                                    </a>
-                                    <form method="post" onsubmit="return confirm('¿Seguro que deseas eliminar este comprobante?');" data-loading-form>
-                                        <input type="hidden" name="_token" value="<?php echo e(csrf_token()); ?>">
-                                        <input type="hidden" name="form_action" value="delete">
-                                        <input type="hidden" name="id" value="<?php echo e($record['id']); ?>">
-                                        <button type="submit" class="tbl-action tbl-action--delete" title="Eliminar" aria-label="Eliminar comprobante <?php echo e($record['id']); ?>" data-loading-button>
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
+                            <td data-label="Completado" class="text-center">
+                                <form method="post" class="d-inline-flex" onsubmit="return confirm('<?php echo e($toggleConfirm); ?>');" data-loading-form>
+                                    <input type="hidden" name="_token" value="<?php echo e(csrf_token()); ?>">
+                                    <input type="hidden" name="form_action" value="<?php echo e($toggleAction); ?>">
+                                    <input type="hidden" name="id" value="<?php echo e($record['id']); ?>">
+                                    <button type="submit" class="tbl-action tbl-action--toggle <?php echo $isCompleted ? 'is-completed' : ''; ?>" title="<?php echo e($toggleTitle); ?>" aria-label="<?php echo e($toggleAria); ?>" data-loading-button>
+                                        <i class="fa-solid <?php echo e($toggleIcon); ?>"></i>
+                                    </button>
+                                </form>
+                            </td>
+                            <td data-label="Editar" class="text-center">
+                                <a class="tbl-action tbl-action--edit" href="<?php echo e(app_url('comprobantes.php')); ?>?action=edit&id=<?php echo e($record['id']); ?>" title="Editar" aria-label="Editar comprobante <?php echo e($record['id']); ?>">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </a>
+                            </td>
+                            <td data-label="PDF" class="text-center">
+                                <a class="tbl-action tbl-action--pdf" href="<?php echo e(app_url('comprobanteinvestpdf.php')); ?>?id=<?php echo e($record['id']); ?>&cedula=<?php echo e($record['cedula']); ?>" target="_blank" rel="noopener noreferrer" title="Ver PDF" aria-label="Ver PDF <?php echo e($record['id']); ?>">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                </a>
+                            </td>
+                            <td data-label="Eliminar" class="text-center">
+                                <form method="post" class="d-inline-flex" onsubmit="return confirm('Seguro que deseas eliminar este comprobante?');" data-loading-form>
+                                    <input type="hidden" name="_token" value="<?php echo e(csrf_token()); ?>">
+                                    <input type="hidden" name="form_action" value="delete">
+                                    <input type="hidden" name="id" value="<?php echo e($record['id']); ?>">
+                                    <button type="submit" class="tbl-action tbl-action--delete" title="Eliminar" aria-label="Eliminar comprobante <?php echo e($record['id']); ?>" data-loading-button>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -96,15 +119,15 @@ $sortableColumns = array(
         <nav aria-label="Paginacion de comprobantes">
             <ul class="pagination mb-0">
                 <li class="page-item <?php echo $pagination['current_page'] <= 1 ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="<?php echo e(app_url('comprobanteinvest.php')); ?>?<?php echo e(query_string_with(array('page' => max(1, $pagination['current_page'] - 1)))); ?>">Anterior</a>
+                    <a class="page-link" href="<?php echo e(app_url('comprobantes.php')); ?>?<?php echo e(query_string_with(array('page' => max(1, $pagination['current_page'] - 1)))); ?>">Anterior</a>
                 </li>
                 <?php for ($pageNumber = 1; $pageNumber <= $pagination['total_pages']; $pageNumber++) : ?>
                     <li class="page-item <?php echo $pageNumber === $pagination['current_page'] ? 'active' : ''; ?>">
-                        <a class="page-link" href="<?php echo e(app_url('comprobanteinvest.php')); ?>?<?php echo e(query_string_with(array('page' => $pageNumber))); ?>"><?php echo e($pageNumber); ?></a>
+                        <a class="page-link" href="<?php echo e(app_url('comprobantes.php')); ?>?<?php echo e(query_string_with(array('page' => $pageNumber))); ?>"><?php echo e($pageNumber); ?></a>
                     </li>
                 <?php endfor; ?>
                 <li class="page-item <?php echo $pagination['current_page'] >= $pagination['total_pages'] ? 'disabled' : ''; ?>">
-                    <a class="page-link" href="<?php echo e(app_url('comprobanteinvest.php')); ?>?<?php echo e(query_string_with(array('page' => min($pagination['total_pages'], $pagination['current_page'] + 1)))); ?>">Siguiente</a>
+                    <a class="page-link" href="<?php echo e(app_url('comprobantes.php')); ?>?<?php echo e(query_string_with(array('page' => min($pagination['total_pages'], $pagination['current_page'] + 1)))); ?>">Siguiente</a>
                 </li>
             </ul>
         </nav>

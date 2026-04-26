@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/includes/bootstrap.php';
+require_capability('comprobantes.manage');
 require('fpdf/fpdf.php');
 include('connection/conexion.php');
 include('connection/funciones.php');
@@ -51,6 +53,18 @@ if (!function_exists('build_validation_token')) {
         ));
 
         return strtoupper(substr(hash('sha256', $payload), 0, 24));
+    }
+}
+
+if (!function_exists('pdf_comprobantes_user_scope')) {
+    function pdf_comprobantes_user_scope()
+    {
+        $isPrivileged = current_user_can('solicitudes.manage') || current_user_can('clientes.manage');
+
+        return array(
+            'restricted' => !$isPrivileged,
+            'user_id' => current_user_id(),
+        );
     }
 }
 
@@ -398,10 +412,19 @@ if (isset($_GET['validate']) && (string) $_GET['validate'] === '1' && isset($_GE
 if (isset($_GET['id']) && isset($_GET['cedula'])) {
     $id = (int) $_GET['id'];
     $cedula = (string) $_GET['cedula'];
+    $scope = pdf_comprobantes_user_scope();
 
     $query = 'SELECT id, nombre, cedula, celular, email, lugar, fecha, hora, comentarios, precio_show FROM eventos WHERE id = ? AND cedula = ?';
+    if ($scope['restricted']) {
+        $query .= ' AND user_id = ?';
+    }
     $stmt = mysqli_prepare($conexion, $query);
-    mysqli_stmt_bind_param($stmt, 'is', $id, $cedula);
+    if ($scope['restricted']) {
+        $userId = $scope['user_id'];
+        mysqli_stmt_bind_param($stmt, 'isi', $id, $cedula, $userId);
+    } else {
+        mysqli_stmt_bind_param($stmt, 'is', $id, $cedula);
+    }
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
 

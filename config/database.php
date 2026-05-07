@@ -17,7 +17,6 @@ if (!function_exists('app_pdo')) {
         $username = env('DB_USER', 'root');
         $password = env('DB_PASSWORD', '');
         $charset = env('DB_CHARSET', 'utf8mb4');
-
         $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
         $debugMode = strtolower((string) env('APP_ENV', 'local')) !== 'production'
             || strtolower((string) env('APP_DEBUG', 'false')) === 'true';
@@ -87,4 +86,3 @@ if (!function_exists('app_column_exists')) {
         return $cache[$cacheKey];
     }
 }
-

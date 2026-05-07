@@ -56,9 +56,9 @@ APP_ENV=production
 # Base de datos (usa los datos del cPanel MySQL)
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=cpanel_db_name        # nombre real de tu BD en cPanel
-DB_USER=cpanel_db_user         # usuario de BD en cPanel
-DB_PASSWORD=TuClaveAqui
+DB_NAME=cpanel_db_name              # nombre real de tu BD en cPanel
+DB_USER=cpanel_db_user              # usuario de BD en cPanel
+DB_PASSWORD=change_me_securely
 DB_CHARSET=utf8mb4
 
 # SMS para recuperacion de contrasena

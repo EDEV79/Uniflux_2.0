@@ -18,12 +18,6 @@ if (!function_exists('app_pdo')) {
         $password = env('DB_PASSWORD', '');
         $charset = env('DB_CHARSET', 'utf8mb4');
 
-        /* --------datos de la conexion a la base de datos cpanel ----------- */
-        //"host:localhost", 
-        //"username:cpanel_db_user",    
-        //"password:change_me_securely", 
-        //"database:uniflux_db");
-
         $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $host, $port, $database, $charset);
         $debugMode = strtolower((string) env('APP_ENV', 'local')) !== 'production'
             || strtolower((string) env('APP_DEBUG', 'false')) === 'true';

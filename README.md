@@ -41,13 +41,14 @@ Construir una base realista para operar un producto administrativo multi-cliente
 
 ## Arquitectura del proyecto
 
-Estructura modular orientada a mantenimiento:
+Estructura modular orientada a mantenimiento y despliegue seguro en cPanel:
 
-- `modules/`: dominios funcionales (`dashboard`, `comprobantes`, `gastos`, `clientes`, `servicios`).
-- `components/`: bloques reutilizables de interfaz.
-- `includes/`: bootstrap, layout y helpers globales.
-- `connection/` y `config/`: conexion y configuracion.
-- `database/`: scripts SQL de migracion y esquema.
+- `apps/uniflux/`: codigo privado de la aplicacion.
+- `uniflux.space/`: puntos de entrada y assets publicos del dominio.
+- `logs_apps/uniflux/`: logs propios fuera del webroot.
+- `apps/shared/`: espacio reservado para librerias o helpers compartidos.
+
+La ruta publica recomendada es la raiz del dominio `https://uniflux.space/`; el resto del codigo no debe exponerse directamente en el webroot.
 
 ## Seguridad implementada
 

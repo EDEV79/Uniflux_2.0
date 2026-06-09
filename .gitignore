@@ -15,6 +15,7 @@ node_modules/
 logs/
 storage/logs/
 tmp/
+dist/
 
 # OS/editor files
 .DS_Store

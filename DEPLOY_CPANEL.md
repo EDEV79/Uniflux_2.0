@@ -1,5 +1,8 @@
 # Deploy / Actualizacion en cPanel – UniFlux 2.0
 
+> Estructura actual: codigo privado en `/home1/usuario/apps/uniflux/` y archivos publicos en
+> `/home1/usuario/uniflux.space/`. Para subir por bloques, usa `CPANEL_UPLOAD_BLOCKS.md`.
+>
 > Guia valida tanto para instalacion nueva como para **actualizar** una instalacion existente.
 > Incluye el modulo de **recuperacion de contrasena por SMS (OTP)** agregado en abril 2026.
 
@@ -21,8 +24,8 @@
 
 ### Opcion A – Subir todo (mas seguro)
 
-Sube todo el contenido del proyecto reemplazando lo existente.
-Carpeta destino en cPanel: `public_html/` o el subdirectorio de tu dominio.
+Sube los bloques segun `CPANEL_UPLOAD_BLOCKS.md`.
+No subas `apps/uniflux/` dentro de `public_html`; solo debe publicarse `uniflux.space/`.
 
 ### Opcion B – Solo archivos cambiados
 
